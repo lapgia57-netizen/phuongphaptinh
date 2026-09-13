@@ -16,52 +16,71 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Tự động tìm kiếm vị trí của file build.gradle để biết app nằm ở đâu (gốc hoặc thư mục con)
+      - name: Locate Android Project Root
+        id: locate-project
+        run: |
+          BUILD_FILE=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1)
+          if [ -z "$BUILD_FILE" ]; then
+            echo "Error: Không tìm thấy file build.gradle nào trong repo!" && exit 1
+          fi
+          PROJECT_ROOT=$(dirname "$BUILD_FILE")
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> $GITHUB_ENV
+          echo "Dự án Android được tìm thấy tại: $PROJECT_ROOT"
+
+      # Cấu hình môi trường Java
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
+      # Cấu hình Android SDK
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Thiết lập Gradle (Action này tự động cài lệnh 'gradle' bản 8.6 vào hệ thống máy ảo)
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.6'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      # Gộp việc kiểm tra và ghi file bằng câu lệnh bash tiêu chuẩn để tránh lỗi cú pháp GitHub
+      # Tạo file google-services.json bằng Bash (An toàn, không lo lỗi cú pháp secrets)
       - name: Inject google-services.json
         run: |
+          TARGET_DIR="${{ env.PROJECT_ROOT }}/app"
+          mkdir -p "$TARGET_DIR"
           if [ ! -z "$GOOGLE_SERVICES_CONTENT" ]; then
-            echo "$GOOGLE_SERVICES_CONTENT" > app/google-services.json
+            echo "$GOOGLE_SERVICES_CONTENT" > "$TARGET_DIR/google-services.json"
+            echo "Đã ghi file google-services.json vào $TARGET_DIR"
           fi
         env:
           GOOGLE_SERVICES_CONTENT: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
-      # Gom hai lệnh debug và release vào cùng 1 step cho gọn code và chạy nhanh hơn
+      # Sử dụng lệnh 'gradle' hệ thống thay vì './gradlew' để không bao giờ bị lỗi thiếu file hay phân quyền
       - name: Build APKs
-        run: ./gradlew assembleDebug assembleRelease --stacktrace
+        run: |
+          cd ${{ env.PROJECT_ROOT }}
+          gradle assembleDebug assembleRelease --stacktrace
 
-      # Chuyển đổi cách check secret qua biến môi trường để sửa dứt điểm lỗi Unrecognized named-value
+      # Ký bản Release APK nếu có cấu hình Keystore
       - name: Sign Release APK
         if: env.HAS_KEYSTORE == 'true'
         uses: r0adkll/sign-android-release@v1
         env:
           HAS_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
         with:
-          releaseDirectory: app/build/outputs/apk/release
+          releaseDirectory: ${{ env.PROJECT_ROOT }}/app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           alias: ${{ secrets.SIGNING_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
 
-      # Gộp hai bước upload thành 1 step duy nhất để tối ưu dung lượng file cấu hình
+      # Gom tất cả file APK tìm thấy trong toàn bộ thư mục build để upload lên Artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-apks
-          path: app/build/outputs/apk/**/*.apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
+            **/build/outputs/apk/release/*.apk
