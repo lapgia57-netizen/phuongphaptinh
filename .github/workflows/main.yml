@@ -9,52 +9,49 @@ on:
 
 jobs:
   build:
-    name: Build Debug & Release APK
+    name: Build APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Lấy source code từ repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Cài JDK 17 (bắt buộc cho Android Gradle Plugin 8.x)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # 3. Cài Android SDK cần thiết (build-tools, platform...)
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 4. Cài đặt & cache Gradle
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.6'
 
-      # 5. Cấp quyền thực thi cho gradlew (Đảm bảo chạy được lệnh build)
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # 6. Tạo app/google-services.json từ GitHub Secret (Nếu có)
-      - name: Inject google-services.json từ Secret
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+      # Gộp việc kiểm tra và ghi file bằng câu lệnh bash tiêu chuẩn để tránh lỗi cú pháp GitHub
+      - name: Inject google-services.json
+        run: |
+          if [ ! -z "$GOOGLE_SERVICES_CONTENT" ]; then
+            echo "$GOOGLE_SERVICES_CONTENT" > app/google-services.json
+          fi
+        env:
+          GOOGLE_SERVICES_CONTENT: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
-      # 7. Build APK Debug (Dùng để test nhanh)
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      # Gom hai lệnh debug và release vào cùng 1 step cho gọn code và chạy nhanh hơn
+      - name: Build APKs
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
 
-      # 8. Build APK Release
-      - name: Build Release APK
-        run: ./gradlew assembleRelease --stacktrace
-
-      # 9. Ký bản release nếu đã cấu hình keystore qua Secrets
-      - name: Ký Release APK
-        if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
+      # Chuyển đổi cách check secret qua biến môi trường để sửa dứt điểm lỗi Unrecognized named-value
+      - name: Sign Release APK
+        if: env.HAS_KEYSTORE == 'true'
         uses: r0adkll/sign-android-release@v1
+        env:
+          HAS_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
         with:
           releaseDirectory: app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
@@ -62,16 +59,9 @@ jobs:
           keyStorePassword: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
 
-      # 10. Upload APK Debug lên tab Artifacts
-      - name: Upload Debug APK
+      # Gộp hai bước upload thành 1 step duy nhất để tối ưu dung lượng file cấu hình
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
-
-      # 11. Upload APK Release lên tab Artifacts
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: app/build/outputs/apk/release/*.apk
+          name: android-apks
+          path: app/build/outputs/apk/**/*.apk
