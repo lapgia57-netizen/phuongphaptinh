@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "168926822259",
+    "project_id": "bigdata-c9bd2",
+    "storage_bucket": "bigdata-c9bd2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:168926822259:android:REPLACE_WITH_REAL_ANDROID_APP_ID",
+        "android_client_info": {
+          "package_name": "com.multipay.pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3eiZy3Jxltpx-QXKFx-WNUlKdNLhBH2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
