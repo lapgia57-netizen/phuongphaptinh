@@ -28,30 +28,30 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # 4. Cài đặt & cache Gradle (không cần file gradlew trong repo)
+      # 4. Cài đặt & cache Gradle
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.6'
 
-      # 5. (Tùy chọn) Tạo app/google-services.json từ GitHub Secret
-      #    Settings > Secrets and variables > Actions > New repository secret
-      #    Tên: GOOGLE_SERVICES_JSON, giá trị: dán nguyên nội dung file google-services.json thật
-      - name: Inject google-services.json từ Secret (nếu có)
+      # 5. Cấp quyền thực thi cho gradlew (Đảm bảo chạy được lệnh build)
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # 6. Tạo app/google-services.json từ GitHub Secret (Nếu có)
+      - name: Inject google-services.json từ Secret
         if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
         run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
-      # 6. Build APK Debug (không cần ký, dùng để test nhanh)
+      # 7. Build APK Debug (Dùng để test nhanh)
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
-      # 7. Build APK Release (chưa ký, trừ khi có keystore ở bước dưới)
+      # 8. Build APK Release
       - name: Build Release APK
-        run: gradle assembleRelease --stacktrace
+        run: ./gradlew assembleRelease --stacktrace
 
-      # 8. (Tùy chọn) Ký bản release nếu bạn đã cấu hình keystore qua Secrets
-      #    Cần các secret: SIGNING_KEYSTORE_BASE64, SIGNING_KEYSTORE_PASSWORD,
-      #    SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD
+      # 9. Ký bản release nếu đã cấu hình keystore qua Secrets
       - name: Ký Release APK
         if: ${{ secrets.SIGNING_KEYSTORE_BASE64 != '' }}
         uses: r0adkll/sign-android-release@v1
@@ -62,14 +62,14 @@ jobs:
           keyStorePassword: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
 
-      # 9. Upload APK Debug để tải về từ tab Actions > workflow run > Artifacts
+      # 10. Upload APK Debug lên tab Artifacts
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk
 
-      # 10. Upload APK Release (đã ký nếu có secret, ngược lại là bản unsigned)
+      # 11. Upload APK Release lên tab Artifacts
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:
